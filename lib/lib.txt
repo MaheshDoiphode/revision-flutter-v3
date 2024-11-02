@@ -1,0 +1,637 @@
+lib\main.dart
+```
+import 'package:flutter/material.dart';
+import 'src/app.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  runApp(const MyApp());
+}```
+
+lib\src\app.dart
+```
+import 'package:flutter/material.dart';
+import 'package:flutter_gen/gen_l10n/app_localizations.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'screens/home_screen.dart';
+import 'screens/login_screen.dart';
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      restorationScopeId: 'app',
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en', ''), // English, no country code
+      ],
+      onGenerateTitle: (BuildContext context) =>
+          AppLocalizations.of(context)!.appTitle,
+      theme: ThemeData(),
+      darkTheme: ThemeData.dark(),
+      themeMode: ThemeMode.system,
+      onGenerateRoute: (settings) {
+        if (settings.name == '/') {
+          return MaterialPageRoute(builder: (context) => const LoginScreen());
+        } else if (settings.name == '/home') {
+          final args = settings.arguments as Map<String, dynamic>;
+          return MaterialPageRoute(
+            builder: (context) => HomeScreen(userId: args['userId'] as String),
+          );
+        }
+        return null;
+      },
+    );
+  }
+}```
+.
+lib\src\localization\app_en.arb
+```
+{
+  "appTitle": "revisionv2",
+  "@appTitle": {
+    "description": "The title of the application"
+  }
+}
+```
+.
+lib\src\models\revision_record.dart
+```
+import 'package:json_annotation/json_annotation.dart';
+import 'package:mongo_dart/mongo_dart.dart';
+
+part 'revision_record.g.dart';
+
+@JsonSerializable(explicitToJson: true)
+class User {
+  @JsonKey(name: '_id')
+  final ObjectId id;
+  final String userId;
+  final List<Category> categories;
+
+  User({
+    ObjectId? id,
+    required this.userId,
+    required this.categories,
+  }) : id = id ?? ObjectId();
+
+  factory User.fromJson(Map<String, dynamic> json) => _$UserFromJson(json);
+  Map<String, dynamic> toJson() => _$UserToJson(this);
+}
+
+@JsonSerializable(explicitToJson: true)
+class Category {
+  final String categoryName;
+  final List<Subcategory> subcategories;
+
+  Category({
+    required this.categoryName,
+    required this.subcategories,
+  });
+
+  factory Category.fromJson(Map<String, dynamic> json) => _$CategoryFromJson(json);
+  Map<String, dynamic> toJson() => _$CategoryToJson(this);
+}
+
+@JsonSerializable(explicitToJson: true)
+class Subcategory {
+  final String subcategoryName;
+  final List<Topic> topics;
+
+  Subcategory({
+    required this.subcategoryName,
+    required this.topics,
+  });
+
+  factory Subcategory.fromJson(Map<String, dynamic> json) => _$SubcategoryFromJson(json);
+  Map<String, dynamic> toJson() => _$SubcategoryToJson(this);
+}
+
+@JsonSerializable(explicitToJson: true)
+class Topic {
+  final String topicName;
+  final String notes;
+  @JsonKey(fromJson: DateTime.parse, toJson: _dateToString)
+  final DateTime startDate;
+  final List<RevisionDate> revisionDates;
+
+  Topic({
+    required this.topicName,
+    required this.notes,
+    required this.startDate,
+    required this.revisionDates,
+  });
+
+  static String _dateToString(DateTime date) => date.toIso8601String();
+
+  factory Topic.fromJson(Map<String, dynamic> json) => _$TopicFromJson(json);
+  Map<String, dynamic> toJson() => _$TopicToJson(this);
+}
+
+@JsonSerializable(explicitToJson: true)
+class RevisionDate {
+  final int revisionNumber;
+  @JsonKey(fromJson: DateTime.parse, toJson: _dateToString)
+  final DateTime revisionDate;
+  bool completed;
+
+  RevisionDate({
+    required this.revisionNumber,
+    required this.revisionDate,
+    this.completed = false,
+  });
+
+  static String _dateToString(DateTime date) => date.toIso8601String();
+
+  factory RevisionDate.fromJson(Map<String, dynamic> json) => _$RevisionDateFromJson(json);
+  Map<String, dynamic> toJson() => _$RevisionDateToJson(this);
+}```
+.
+lib\src\screens\home_screen.dart
+```
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class HomeScreen extends StatefulWidget {
+  final String userId;
+  
+  const HomeScreen({
+    super.key, 
+    required this.userId
+  });
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Welcome ${widget.userId}'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () async {
+              // Clear user data
+              final prefs = await SharedPreferences.getInstance();
+              await prefs.clear();
+              
+              // Navigate to login screen and remove all previous routes
+              if (!context.mounted) return;
+              Navigator.pushNamedAndRemoveUntil(
+                context,
+                '/',
+                (route) => false,
+              );
+            },
+          ),
+        ],
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(
+              'Hello, ${widget.userId}!',
+              style: Theme.of(context).textTheme.headlineMedium,
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              'Welcome to your home screen',
+              style: TextStyle(fontSize: 16),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}```
+.
+lib\src\screens\login_screen.dart
+```
+import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({super.key});
+
+  Future<void> _handleLogin(BuildContext context, String userId) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userId', userId);
+    
+    if (!context.mounted) return;
+    Navigator.pushReplacementNamed(
+      context,
+      '/home',
+      arguments: {'userId': userId},
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final userIdController = TextEditingController();
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Login'),
+      ),
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextField(
+              controller: userIdController,
+              decoration: const InputDecoration(
+                labelText: 'Enter your name',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => _handleLogin(context, userIdController.text),
+              child: const Text('Continue'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}```
+.
+lib\src\services\mongo_service.dart
+```
+import '../models/revision_record.dart';
+
+abstract class IMongoService {
+  /// Connection management
+  Future<void> connect();
+  Future<void> close();
+
+  /// User operations
+  Future<User?> findUserById(String userId);
+  Future<void> createNewUser(String userId);
+  Future<bool> checkUserExists(String userId);
+
+  /// Category operations
+  Future<List<String>> fetchUserCategories(String userId);
+  Future<List<String>> fetchSubcategories(String userId, String categoryName);
+
+  /// Category management
+  Future<void> createCategory(String userId, String categoryName);
+  Future<void> createSubcategory(String userId, String categoryName, String subcategoryName);
+
+  /// Topic operations
+  Future<void> insertTopic({
+    required String userId,
+    required String categoryName,
+    required String subcategoryName,
+    required Topic topic,
+  });
+
+  /// Revision operations
+  Future<List<Topic>> fetchTodaysRevisions(String userId);
+  Future<List<Map<String, dynamic>>> fetchPendingRevisions(String userId);
+  
+  Future<void> completeRevision({
+    required String userId,
+    required String categoryName,
+    required String subcategoryName,
+    required String topicName,
+    required int revisionNumber,
+  });
+
+  Future<void> updateRevisionStatus({
+    required String userId,
+    required String categoryName,
+    required String subcategoryName,
+    required String topicName,
+    required int revisionNumber,
+    required bool completed,
+  });
+}
+```
+.
+lib\src\services\impl\mongo_service_impl.dart
+```
+import 'package:mongo_dart/mongo_dart.dart';
+import 'package:revisionv2/src/services/mongo_service.dart';
+import 'package:revisionv2/src/models/revision_record.dart';
+
+class MongoServiceImpl implements IMongoService {
+  late Db _db;
+  static const String _connectionString = 'mongodb+srv://admin:1234@revision.j1dld.mongodb.net/?retryWrites=true&w=majority&appName=revision';
+
+  // Collection name
+  static const String _collection = 'users';
+
+  @override
+  Future<void> connect() async {
+    _db = await Db.create(_connectionString);
+    await _db.open();
+  }
+
+  @override
+  Future<void> close() async {
+    await _db.close();
+  }
+
+  @override
+  Future<bool> checkUserExists(String userId) async {
+    final users = _db.collection(_collection);
+    final user = await users.findOne(where.eq('userId', userId));
+    return user != null;
+  }
+
+  @override
+  Future<void> createNewUser(String userId) async {
+    final users = _db.collection(_collection);
+    await users.insertOne({
+      'userId': userId,
+      'categories': [],
+    });
+  }
+
+  @override
+  Future<User?> findUserById(String userId) async {
+    final users = _db.collection(_collection);
+    final userData = await users.findOne(where.eq('userId', userId));
+    if (userData == null) return null;
+    return User.fromJson(userData);
+  }
+
+  @override
+  Future<List<String>> fetchUserCategories(String userId) async {
+    final users = _db.collection(_collection);
+    final user = await users.findOne(where.eq('userId', userId));
+    if (user == null) return [];
+    
+    return (user['categories'] as List).map((c) => c['categoryName'].toString()).toList();
+  }
+
+  @override
+  Future<List<String>> fetchSubcategories(String userId, String categoryName) async {
+    final users = _db.collection(_collection);
+    final user = await users.findOne(where.eq('userId', userId));
+    if (user == null) return [];
+
+    final category = (user['categories'] as List).firstWhere(
+      (c) => c['categoryName'] == categoryName,
+      orElse: () => null,
+    );
+    if (category == null) return [];
+
+    return (category['subcategories'] as List)
+        .map((s) => s['subcategoryName'].toString())
+        .toList();
+  }
+
+  @override
+  Future<void> createCategory(String userId, String categoryName) async {
+    final users = _db.collection(_collection);
+    await users.updateOne(
+      where.eq('userId', userId),
+      modify.push('categories', {
+        'categoryName': categoryName,
+        'subcategories': [],
+      }),
+    );
+  }
+
+  @override
+  Future<void> createSubcategory(String userId, String categoryName, String subcategoryName) async {
+    final users = _db.collection(_collection);
+    await users.updateOne(
+      where.eq('userId', userId).eq('categories.categoryName', categoryName),
+      modify.push('categories.$.subcategories', {
+        'subcategoryName': subcategoryName,
+        'topics': [],
+      }),
+    );
+  }
+
+  @override
+  Future<void> insertTopic({
+    required String userId,
+    required String categoryName,
+    required String subcategoryName,
+    required Topic topic,
+  }) async {
+    final users = _db.collection(_collection);
+    await users.updateOne(
+      where
+          .eq('userId', userId)
+          .eq('categories.categoryName', categoryName)
+          .eq('categories.subcategories.subcategoryName', subcategoryName),
+      modify.push('categories.$[cat].subcategories.$[sub].topics', topic.toJson()),
+      arrayFilters: [
+        {'cat.categoryName': categoryName},
+        {'sub.subcategoryName': subcategoryName},
+      ],
+    );
+  }
+
+  @override
+  Future<List<Topic>> fetchTodaysRevisions(String userId) async {
+    final users = _db.collection(_collection);
+    final today = DateTime.now();
+    final tomorrow = today.add(const Duration(days: 1));
+
+    final pipeline = AggregationPipelineBuilder()
+        .addStage(Match(where.eq('userId', userId)))
+        .addStage(Unwind(const Field('categories')))
+        .addStage(Unwind(const Field('categories.subcategories')))
+        .addStage(Unwind(const Field('categories.subcategories.topics')))
+        .addStage(Unwind(const Field('categories.subcategories.topics.revisionDates')))
+        .addStage(Match({
+          'categories.subcategories.topics.revisionDates.revisionDate': {
+            '\$gte': today.toIso8601String(),
+            '\$lt': tomorrow.toIso8601String(),
+          },
+          'categories.subcategories.topics.revisionDates.completed': false,
+        }))
+        .build();
+
+    final results = await users.aggregateToStream(pipeline).toList();
+    
+    return results.map((doc) {
+      final topicData = doc['categories']['subcategories']['topics'];
+      return Topic.fromJson(topicData);
+    }).toList();
+  }
+
+  @override 
+  Future<List<Map<String, dynamic>>> fetchPendingRevisions(String userId) async {
+    final users = _db.collection(_collection);
+    
+    final pipeline = AggregationPipelineBuilder()
+        .addStage(Match(where.eq('userId', userId)))
+        .addStage(Unwind(const Field('categories')))
+        .addStage(Unwind(const Field('categories.subcategories')))
+        .addStage(Unwind(const Field('categories.subcategories.topics')))
+        .addStage(Unwind(const Field('categories.subcategories.topics.revisionDates')))
+        .addStage(Match({
+          'categories.subcategories.topics.revisionDates.completed': false,
+        }))
+        .addStage(Sort({
+          'categories.subcategories.topics.revisionDates.revisionDate': 1,
+        }))
+        .build();
+
+    return await users.aggregateToStream(pipeline).toList();
+  }
+
+  @override
+  Future<void> updateRevisionStatus({
+    required String userId,
+    required String categoryName,
+    required String subcategoryName,
+    required String topicName,
+    required int revisionNumber,
+    required bool completed,
+  }) async {
+    final users = _db.collection(_collection);
+
+    await users.updateOne(
+      where
+          .eq('userId', userId)
+          .eq('categories.categoryName', categoryName)
+          .eq('categories.subcategories.subcategoryName', subcategoryName)
+          .eq('categories.subcategories.topics.topicName', topicName)
+          .eq('categories.subcategories.topics.revisionDates.revisionNumber', revisionNumber),
+      modify.set('categories.$[cat].subcategories.$[sub].topics.$[topic].revisionDates.$[rev].completed', completed),
+      arrayFilters: [
+        {'cat.categoryName': categoryName},
+        {'sub.subcategoryName': subcategoryName},
+        {'topic.topicName': topicName},
+        {'rev.revisionNumber': revisionNumber},
+      ],
+    );
+  }
+
+  @override
+  Future<void> completeRevision({
+    required String userId,
+    required String categoryName, 
+    required String subcategoryName,
+    required String topicName,
+    required int revisionNumber,
+  }) async {
+    await updateRevisionStatus(
+      userId: userId,
+      categoryName: categoryName,
+      subcategoryName: subcategoryName,
+      topicName: topicName,
+      revisionNumber: revisionNumber,
+      completed: true,
+    );
+  }
+}```
+.
+lib\src\utils\revision_dates_calculator.dart
+```
+import '../models/revision_record.dart';
+
+class RevisionDatesCalculator {
+  /// Generates revision dates following the algorithm:
+  /// 1. First revision: within 24 hours of start
+  /// 2. Second revision: 3 days after start
+  /// 3. Third revision: 7 days after second revision
+  /// 4. Fourth revision: 7 days after third revision
+  /// 5. Fifth revision: 7 days after fourth revision
+  /// 6. Sixth revision: 60 days after fifth revision
+  /// 7. Seventh revision: 4 months after sixth revision
+  static List<RevisionDate> calculateRevisionDates(DateTime startDate) {
+    final List<RevisionDate> revisionDates = [];
+    DateTime previousDate = startDate;
+
+    // First revision: Next day
+    final firstRevision = RevisionDate(
+      revisionNumber: 1,
+      revisionDate: startDate.add(const Duration(days: 1)),
+      completed: false,
+    );
+    revisionDates.add(firstRevision);
+    previousDate = startDate; // Starting point for second revision
+
+    // Second revision: 3 days after start
+    final secondRevision = RevisionDate(
+      revisionNumber: 2,
+      revisionDate: previousDate.add(const Duration(days: 3)),
+      completed: false,
+    );
+    revisionDates.add(secondRevision);
+    previousDate = secondRevision.revisionDate;
+
+    // Third revision: 7 days after second revision
+    final thirdRevision = RevisionDate(
+      revisionNumber: 3,
+      revisionDate: previousDate.add(const Duration(days: 7)),
+      completed: false,
+    );
+    revisionDates.add(thirdRevision);
+    previousDate = thirdRevision.revisionDate;
+
+    // Fourth revision: 7 days after third revision
+    final fourthRevision = RevisionDate(
+      revisionNumber: 4,
+      revisionDate: previousDate.add(const Duration(days: 7)),
+      completed: false,
+    );
+    revisionDates.add(fourthRevision);
+    previousDate = fourthRevision.revisionDate;
+
+    // Fifth revision: 7 days after fourth revision
+    final fifthRevision = RevisionDate(
+      revisionNumber: 5,
+      revisionDate: previousDate.add(const Duration(days: 7)),
+      completed: false,
+    );
+    revisionDates.add(fifthRevision);
+    previousDate = fifthRevision.revisionDate;
+
+    // Sixth revision: 60 days after fifth revision
+    final sixthRevision = RevisionDate(
+      revisionNumber: 6,
+      revisionDate: previousDate.add(const Duration(days: 60)),
+      completed: false,
+    );
+    revisionDates.add(sixthRevision);
+    previousDate = sixthRevision.revisionDate;
+
+    // Seventh revision: ~4 months (120 days) after sixth revision
+    final seventhRevision = RevisionDate(
+      revisionNumber: 7,
+      revisionDate: previousDate.add(const Duration(days: 120)),
+      completed: false,
+    );
+    revisionDates.add(seventhRevision);
+
+    return revisionDates;
+  }
+
+  /// Helper method to create a new Topic with calculated revision dates
+  static Topic createTopicWithDates({
+    required String topicName,
+    required String notes,
+    DateTime? startDate,
+  }) {
+    final start = startDate ?? DateTime.now();
+    return Topic(
+      topicName: topicName,
+      notes: notes,
+      startDate: start,
+      revisionDates: calculateRevisionDates(start),
+    );
+  }
+}```
+.
